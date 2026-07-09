@@ -1,0 +1,25 @@
+# ==============================================================================
+# Debate-AI (Live Fact Checker) - Project Requirements
+# ==============================================================================
+
+# Core Data Layer & Scrapers
+requests>=2.31.0
+datasets>=2.14.0
+pandas>=2.0.0
+pyarrow>=12.0.0
+python-dotenv>=1.0.0
+tqdm>=4.65.0
+pillow>=10.0.0
+
+# Audio Processing & Speaker Recognition Modeling
+soundfile>=0.12.0
+scipy>=1.10.0
+scikit-learn>=1.2.0
+pyyaml>=6.0
+
+# Machine Learning (Speaker Verification & Diarization)
+# Note: For CPU execution, install via: pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu
+torch>=2.0.0,<3.0.0
+torchaudio>=2.0.0,<3.0.0
+asteroid-filterbanks>=0.4.0,<0.5.0
+numpy>=1.24.0,<2.0.0

@@ -1,0 +1,39 @@
+# ==============================================================================
+# Debate-AI Git Ignore Configurations
+# ==============================================================================
+
+# Virtual Environment
+.venv/
+venv/
+ENV/
+
+# Data Directories (Ignored to avoid uploading massive raw/processed datasets)
+data/
+
+# Environment Variables & Credentials
+.env
+.env.local
+.env.*.local
+
+# Research, Temporary, and Model files
+scratch/
+*.model
+*.pt
+*.pkl
+*.pth
+*.mat
+*.npy
+
+# Python Compile Caches
+__pycache__/
+*.py[cod]
+*$py.class
+
+# IDE and Project Settings
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
