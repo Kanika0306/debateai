@@ -139,3 +139,28 @@ Pair 3: Sample 1 (Speaker A - ID: Y8hIVOBuels) vs Sample 3 (Speaker B - ID: x6uY
 ### 💡 Result Analysis
 - **Pair 1 & 3 (Different Speaker Comparison):** Cosine similarities are **0.2927** and **0.3073** respectively. Both are below the speaker match threshold (~0.40), confirming the model correctly identifies them as different individuals.
 - **Pair 2 (Same Speaker Comparison):** Cosine similarity is **0.6754** (well above the threshold), confirming the model successfully verifies that both speech segments belong to **Speaker B**.
+
+---
+
+## 🎙️ Phase 3: Audio Pipeline & Speaker Verification Integration
+
+We have integrated the transcription and speaker verification pipelines directly into the FastAPI backend service of **debate-ai**.
+
+### 1. Architectural Additions
+*   **[audio_service.py](file:///c:/Users/kanik/Desktop/debateai/backend/services/audio_service.py)**: Centralizes model loading (`faster-whisper` and Clova AI `ResNetSE34L`), audio resampling (to 16kHz mono), speaker enrollment, speaker identification (cosine similarity), and transcription.
+*   **[routes.py](file:///c:/Users/kanik/Desktop/debateai/backend/api/routes.py)**: Exposes two new POST endpoints:
+    *   `POST /audio/enroll`: Enroll speaker voice profiles (saves audio reference and extracts verification embeddings).
+    *   `POST /audio/process`: Main entry point for audio segments. Transcribes, identifies the speaker, and forwards results to the core debate orchestration pipeline.
+*   **Docker Volumes & Layer Cache**: Mounted `./data:/app/data` and `./scratch:/app/scratch` to allow container runtime access to datasets and pre-trained weights. Optimized the Dockerfile to install `python-multipart` without invalidating the requirements layer cache, reducing build times from minutes to seconds.
+
+### 2. Verification & Test Results
+All **21/21 tests passed** successfully.
+*   **Unit Tests** (`tests/unit/test_audio.py`):
+    *   `test_audio_embedding_generation`: Verifies mono resampling and 512-dim embedding extraction.
+    *   `test_speaker_enrollment_and_identification`: Verifies cosine-similarity matching of voice prints.
+    *   `test_speaker_identification_below_threshold`: Verifies unknown speaker fallback.
+    *   `test_transcription`: Tests `faster-whisper` segments and logprob-to-probability conversion.
+*   **End-to-End Manual API Tests** (`scratch/test_audio_endpoint.py`):
+    *   Uploading `sample_002_verif.wav` to `/audio/process` successfully enrolled base profiles, recognized the speaker as `Speaker_B`, and transcribed:
+        > *"No, it's not for me. I am a Catherine Danum dancer and Miss Donovan has sent me out to get this makeup."*
+

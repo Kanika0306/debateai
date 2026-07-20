@@ -78,6 +78,8 @@ services:
       - ./backend:/app/backend
       - ./agents:/app/agents
       - ./scripts:/app/scripts
+      - ./scratch:/app/scratch
+      - ./data:/app/data
       # Persistent model cache (multi-GB; must not re-download on rebuild)
       - model_cache:/app/model_cache
     ports:

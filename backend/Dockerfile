@@ -26,6 +26,7 @@ WORKDIR /app
 # reuse the cached layer instead of reinstalling everything.
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir python-multipart
 
 # ---- Install PyTorch CPU (for Docker — keeps image smaller than GPU build) ----
 # Using CPU-only torch to keep image size manageable. For GPU support inside

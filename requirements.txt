@@ -44,6 +44,7 @@ tenacity                  # retry logic for flaky LLM/API calls
 # ── Backend ──
 fastapi
 uvicorn[standard]
+python-multipart
 redis
 sqlalchemy
 alembic

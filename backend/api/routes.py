@@ -11,10 +11,15 @@ Endpoints:
 import asyncio
 import json
 import logging
+import os
+import shutil
+from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, Query
+from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, Query, File, UploadFile, Form
 from sqlalchemy.orm import Session as DBSession
+
+ROOT = Path(__file__).resolve().parent.parent.parent
 
 from agents.schemas import (
     TranscriptSegment,
@@ -137,6 +142,148 @@ async def verify_claim(req: VerifyRequest):
     agent = FactVerificationAgent()
     output = await agent.run_with_timeout(req, timeout=10.0)
     return output.model_dump()
+
+
+def auto_enroll_samples():
+    """Enroll baseline speakers from the voxceleb_sample folder."""
+    from backend.services import audio_service
+    sample_dir = os.path.join(ROOT, "data", "raw", "diarization", "voxceleb_sample")
+    
+    if audio_service._enrolled_speakers:
+        return
+        
+    enrollments = [
+        ("Speaker_A", "sample_001_ident.wav"),
+        ("Speaker_B", "sample_002_verif.wav"),
+    ]
+    for name, filename in enrollments:
+        path = os.path.join(sample_dir, filename)
+        if os.path.exists(path):
+            audio_service.enroll_speaker(name, path)
+
+
+# ==============================================================================
+# POST /audio/enroll — Enroll a speaker profile with an audio file
+# ==============================================================================
+@router.post("/audio/enroll")
+async def enroll_speaker(speaker_name: str, file: UploadFile = File(...)):
+    """Enroll a speaker profile by uploading a reference audio file."""
+    temp_dir = os.path.join(ROOT, "data", "raw", "enrollments")
+    os.makedirs(temp_dir, exist_ok=True)
+    
+    file_path = os.path.join(temp_dir, f"{speaker_name}.wav")
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+        
+    from backend.services import audio_service
+    success = audio_service.enroll_speaker(speaker_name, file_path)
+    if success:
+        return {"status": "success", "message": f"Enrolled speaker {speaker_name}"}
+    else:
+        return {"status": "error", "message": "Failed to extract speaker embedding"}
+
+
+# ==============================================================================
+# POST /audio/process — Process an audio segment: transcribe + verify + orchestrate
+# ==============================================================================
+@router.post("/audio/process")
+async def process_audio(
+    session_id: str = Form("default"),
+    file: UploadFile = File(...),
+    db: DBSession = Depends(get_db)
+):
+    """
+    Process an uploaded audio segment:
+    1. Resample and extract speaker verification embedding to match identity
+    2. Transcribe speech to text using faster-whisper
+    3. Feed resulting transcript into Orchestrator pipeline
+    """
+    auto_enroll_samples()
+
+    temp_dir = os.path.join(ROOT, "data", "raw", "uploads")
+    os.makedirs(temp_dir, exist_ok=True)
+    
+    import uuid
+    filename = f"{uuid.uuid4()}.wav"
+    file_path = os.path.join(temp_dir, filename)
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    try:
+        from backend.services import audio_service
+        speaker = audio_service.identify_speaker(file_path)
+
+        text, avg_prob = audio_service.transcribe_audio(file_path)
+        if not text:
+            return {"status": "warning", "message": "No transcription generated from audio."}
+
+        orch = await get_orchestrator()
+        
+        db_session = db.query(models.Session).filter_by(session_id=session_id).first()
+        if not db_session:
+            db_session = models.Session(session_id=session_id)
+            db.add(db_session)
+            db.commit()
+
+        transcript = models.Transcript(
+            session_id=session_id,
+            speaker=speaker,
+            segment_text=text,
+        )
+        db.add(transcript)
+        db.commit()
+        db.refresh(transcript)
+
+        segment = TranscriptSegment(
+            session_id=session_id,
+            speaker=speaker,
+            segment_text=text,
+        )
+        output = await orch.process_segment(segment)
+
+        for cr in output.claim_results:
+            j = cr.judge_output
+            claim_row = models.Claim(
+                transcript_id=transcript.id,
+                claim_text=j.claim,
+                speaker=j.speaker,
+            )
+            db.add(claim_row)
+            db.commit()
+            db.refresh(claim_row)
+
+            verdict_row = models.Verdict(
+                claim_id=claim_row.id,
+                verdict=j.verdict,
+                confidence=j.confidence,
+                cited_chunks=j.cited_chunks,
+                action_required=j.action_required,
+                error=j.error,
+            )
+            db.add(verdict_row)
+
+            fallacy_row = models.Fallacy(
+                claim_id=claim_row.id,
+                fallacy_type=j.fallacy,
+                confidence=cr.fallacy_output.confidence,
+                error=cr.fallacy_output.error,
+            )
+            db.add(fallacy_row)
+
+        db.commit()
+
+        queue = get_live_queue(session_id)
+        await queue.put(output.model_dump_json())
+
+        return {
+            "status": "success",
+            "speaker": speaker,
+            "transcription": text,
+            "pipeline_output": output.model_dump()
+        }
+    finally:
+        if os.path.exists(file_path):
+            os.remove(file_path)
 
 
 # ==============================================================================
