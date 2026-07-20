@@ -1,0 +1,48 @@
+# =============================================================================
+# Root .dockerignore — Debate-AI
+# Prevents large/sensitive files from being sent to the Docker build context.
+# =============================================================================
+
+# Version control
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+.venv
+*.egg-info
+
+# Environment / secrets (never bake into image layers)
+.env
+.env.*
+!.env.example
+
+# Data (too large to bake into images)
+data/raw
+data/
+debate_ai.db
+
+# IDE
+.vscode
+.idea
+*.swp
+
+# Docker
+docker-compose.yml
+docker-compose.override.yml
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Frontend (built separately)
+frontend/node_modules
+frontend/.next
+
+# Misc
+scratch/
+walkthrough.md
+datasetlinks.txt
+*.log

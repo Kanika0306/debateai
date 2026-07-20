@@ -1,25 +1,62 @@
 # ==============================================================================
-# Debate-AI (Live Fact Checker) - Project Requirements
+# Debate-AI (AI Live Fact Checker) — Full Requirements
 # ==============================================================================
 
-# Core Data Layer & Scrapers
-requests>=2.31.0
-datasets>=2.14.0
-pandas>=2.0.0
-pyarrow>=12.0.0
-python-dotenv>=1.0.0
-tqdm>=4.65.0
-pillow>=10.0.0
+# ── Data acquisition & cleaning ──
+datasets
+huggingface_hub
+requests
+trafilatura
+beautifulsoup4
+lxml
+ftfy
+langdetect
+datasketch
+pandas
+pyarrow
+playwright==1.61.0
+greenlet==3.5.3
+pyee==13.0.1
+# run once after install: playwright install chromium
 
-# Audio Processing & Speaker Recognition Modeling
-soundfile>=0.12.0
-scipy>=1.10.0
-scikit-learn>=1.2.0
-pyyaml>=6.0
+# ── Audio ──
+faster-whisper
+pyannote.audio
+webrtcvad-wheels
+ffmpeg-python
+soundfile
+librosa
+pyloudnorm
 
-# Machine Learning (Speaker Verification & Diarization)
-# Note: For CPU execution, install via: pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu
-torch>=2.0.0,<3.0.0
-torchaudio>=2.0.0,<3.0.0
-asteroid-filterbanks>=0.4.0,<0.5.0
-numpy>=1.24.0,<2.0.0
+# ── NLP / embeddings / RAG ──
+spacy
+sentence-transformers
+faiss-cpu
+
+# ── LLM ──
+openai
+tiktoken                 # token counting for chunking + prompt budget checks
+
+# ── Agents / orchestration ──
+pydantic>=2.0
+tenacity                  # retry logic for flaky LLM/API calls
+
+# ── Backend ──
+fastapi
+uvicorn[standard]
+redis
+sqlalchemy
+alembic
+psycopg2-binary
+python-dotenv
+websockets
+httpx
+
+# ── Testing ──
+pytest
+pytest-asyncio
+pytest-mock
+pytest-cov                # coverage reporting, useful before demo day
+
+# ── Torch (install separately per CPU/GPU) ──
+# torch, torchaudio — see walkthrough's CPU install command

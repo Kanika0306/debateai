@@ -1,0 +1,128 @@
+# =============================================================================
+# docker-compose.yml — Debate-AI full stack (dev configuration)
+#
+# Usage:
+#   docker-compose up -d          # start all services
+#   docker-compose down            # stop (keeps volumes / data)
+#   docker-compose down -v         # stop AND delete volumes (fresh start)
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # 1. PostgreSQL
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: debate_ai
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      # Map to 5433 on host to avoid clashing with any local Postgres install
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d debate_ai"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - debate-net
+
+  # ---------------------------------------------------------------------------
+  # 2. Redis
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - debate-net
+
+  # ---------------------------------------------------------------------------
+  # 3. Backend (FastAPI)
+  # ---------------------------------------------------------------------------
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      # Override DATABASE_URL and REDIS_URL to point at Docker service names
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/debate_ai
+      REDIS_URL: redis://redis:6379/0
+      # Model cache — points at a persistent named volume so large model
+      # downloads (whisper, pyannote, sentence-transformers) survive rebuilds
+      HF_HOME: /app/model_cache
+      TRANSFORMERS_CACHE: /app/model_cache
+      TORCH_HOME: /app/model_cache/torch
+    volumes:
+      # Live code reload — bind mount project source into the container
+      - ./backend:/app/backend
+      - ./agents:/app/agents
+      - ./scripts:/app/scripts
+      # Persistent model cache (multi-GB; must not re-download on rebuild)
+      - model_cache:/app/model_cache
+    ports:
+      - "8000:8000"
+    networks:
+      - debate-net
+
+  # ---------------------------------------------------------------------------
+  # 4. Frontend (Next.js)
+  # ---------------------------------------------------------------------------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      # Tell the Next.js app where the backend API lives (server-side)
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+      API_URL: http://backend:8000
+    volumes:
+      # Live code reload — bind mount source, but protect node_modules
+      - ./frontend:/app
+      - /app/node_modules          # anonymous volume: keeps container's node_modules
+      - /app/.next                 # anonymous volume: keeps container's build cache
+    ports:
+      - "3000:3000"
+    networks:
+      - debate-net
+
+# =============================================================================
+# Named volumes
+# =============================================================================
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  model_cache:
+    driver: local
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  debate-net:
+    driver: bridge

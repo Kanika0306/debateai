@@ -17,6 +17,8 @@ data/
 
 # Research, Temporary, and Model files
 scratch/
+vector_db/
+*.db
 *.model
 *.pt
 *.pkl
