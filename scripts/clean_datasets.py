@@ -536,10 +536,19 @@ def section5():
                 raw_html, include_tables=True,
                 favor_precision=True, no_fallback=False
             )
-            if not extracted or len(extracted.strip()) < 50:
-                log.warning("  trafilatura empty for %s - skipping", hp.name)
-                skipped.append(hp.name)
-                continue
+            if not extracted or len(extracted.strip()) < 100:
+                from bs4 import BeautifulSoup
+                soup = BeautifulSoup(raw_html, "html.parser")
+                for s in soup(["script", "style"]):
+                    s.decompose()
+                text_bs = re.sub(r"\s+", " ", soup.get_text()).strip()
+                if len(text_bs) > 100:
+                    log.info("  [FALLBACK-BS] extracted %d chars for %s", len(text_bs), hp.name)
+                    extracted = text_bs
+                else:
+                    log.warning("  trafilatura and BS empty for %s - skipping", hp.name)
+                    skipped.append(hp.name)
+                    continue
             docs.append({
                 "filename":     hp.name,
                 "text":         clean_text(extracted),
