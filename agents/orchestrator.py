@@ -107,6 +107,7 @@ class Orchestrator:
             return OrchestratorOutput(
                 session_id=segment.session_id,
                 speaker=segment.speaker,
+                segment_text=segment.segment_text,
                 claims_extracted=[],
                 claim_results=[],
                 summary=await self._get_summary([]),
@@ -159,6 +160,7 @@ class Orchestrator:
         output = OrchestratorOutput(
             session_id=segment.session_id,
             speaker=segment.speaker,
+            segment_text=segment.segment_text,
             claims_extracted=claims,
             claim_results=final_results,
             summary=summary,

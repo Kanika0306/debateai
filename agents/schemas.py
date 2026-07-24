@@ -202,6 +202,7 @@ class OrchestratorOutput(BaseModel):
     """Full output of the orchestration pipeline for one segment."""
     session_id: str
     speaker: str
+    segment_text: str = Field(default="", description="Raw text of the transcript segment.")
     claims_extracted: List[str] = Field(default_factory=list)
     claim_results: List[ClaimResult] = Field(default_factory=list)
     summary: SummaryOutput = Field(default_factory=SummaryOutput)

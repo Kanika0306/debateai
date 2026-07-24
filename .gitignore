@@ -25,6 +25,16 @@ vector_db/
 *.pth
 *.mat
 *.npy
+*.safetensors
+
+# Fine-Tuning Checkpoints & Data Splits
+fallacy_classifier/checkpoints/
+fallacy_classifier/data_splits/
+
+# Frontend Build & Node Modules
+frontend/.next/
+frontend/node_modules/
+node_modules/
 
 # Python Compile Caches
 __pycache__/

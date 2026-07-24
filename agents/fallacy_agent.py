@@ -1,14 +1,37 @@
 import json
 import logging
-from pydantic import BaseModel
+from typing import Optional
+from pathlib import Path
+
 from agents.base_agent import BaseAgent
 from agents.schemas import FallacyInput, FallacyOutput
 
 log = logging.getLogger(__name__)
 
+# Lazy singleton instance of LocalFallacyAgent
+_local_fallacy_agent = None
+
+def get_local_fallacy_agent():
+    global _local_fallacy_agent
+    if _local_fallacy_agent is None:
+        try:
+            from fallacy_classifier.inference import LocalFallacyAgent
+            from fallacy_classifier.config import FINAL_MODEL_DIR
+            if FINAL_MODEL_DIR.exists():
+                log.info("Initializing LocalFallacyAgent with fine-tuned DeBERTa model from %s", FINAL_MODEL_DIR)
+                _local_fallacy_agent = LocalFallacyAgent(model_dir=FINAL_MODEL_DIR, threshold=0.55)
+            else:
+                log.warning("No fine-tuned model found at %s. Running FallacyAgent in pure LLM mode.", FINAL_MODEL_DIR)
+        except Exception as e:
+            log.warning("Failed to initialize LocalFallacyAgent (%s). Falling back to LLM.", e)
+            _local_fallacy_agent = None
+    return _local_fallacy_agent
+
+
 class FallacyAgent(BaseAgent):
     """
     Classifies a text segment for logical fallacies using our normalized 11-class taxonomy.
+    Employs a local DeBERTa-v3 model with confidence-threshold fallback to LLM.
     """
 
     def get_fallback_output(self, input: FallacyInput, error_msg: str = "Timeout occurred") -> FallacyOutput:
@@ -20,6 +43,28 @@ class FallacyAgent(BaseAgent):
         )
 
     async def run(self, input: FallacyInput) -> FallacyOutput:
+        # Step 1: Try fine-tuned LocalFallacyAgent first
+        local_agent = get_local_fallacy_agent()
+        if local_agent is not None:
+            try:
+                local_results = await local_agent.analyze(input.text)
+                if local_results:
+                    # Pick highest confidence flag
+                    top_flag = max(local_results, key=lambda x: x["confidence"])
+                    if top_flag["confidence"] >= 0.65:
+                        log.info(
+                            "LocalFallacyAgent high confidence match (%s, conf=%.2f)",
+                            top_flag["fallacy_type"], top_flag["confidence"]
+                        )
+                        return FallacyOutput(
+                            text=top_flag["text"],
+                            fallacy_type=top_flag["fallacy_type"],
+                            confidence=top_flag["confidence"]
+                        )
+            except Exception as e:
+                log.warning("LocalFallacyAgent execution error: %s. Falling back to LLM.", e)
+
+        # Step 2: Fallback to LLM agent prompt reasoning
         system_prompt = (
             "You are an expert logician. Your job is to classify the provided argument "
             "into exactly one of the logical fallacies in our normalized taxonomy:\n\n"
@@ -69,6 +114,7 @@ Follow this JSON response format exactly:
         except (json.JSONDecodeError, ValueError, TypeError) as e:
             log.error("Failed to parse fallacy LLM response: %s", e)
             return self.get_fallback_output(input, f"Parsing error: {str(e)}")
+
 
 # Standalone verification runner
 if __name__ == "__main__":

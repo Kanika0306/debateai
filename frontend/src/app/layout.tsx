@@ -1,3 +1,11 @@
+import "./globals.css";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Debate-AI | Real-Time Fact Checker & Fallacy Detector",
+  description: "Live dashboard for real-time debate analysis, claim extraction, fact verification, and fallacy detection.",
+};
+
 export default function RootLayout({
   children,
 }: {
@@ -5,13 +13,6 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <head>
-        <title>Debate-AI | Live Fact Checker</title>
-        <meta
-          name="description"
-          content="Real-time debate fact-checking, fallacy detection, and live dashboard."
-        />
-      </head>
       <body>{children}</body>
     </html>
   );

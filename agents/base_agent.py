@@ -55,12 +55,11 @@ class BaseAgent(ABC):
         base_url = None
         model = "gpt-4o-mini"
 
-        # Prioritize Gemini if GEMINI_API_KEY is set and OPENAI_API_KEY is missing or the quota-exceeded key
-        if gemini_key and (not api_key or "sk-proj-bxKY" in api_key):
+        # Prioritize Gemini if GEMINI_API_KEY is set
+        if gemini_key:
             api_key = gemini_key
             base_url = "https://generativelanguage.googleapis.com/v1beta/openai/"
-            model = "gemini-1.5-flash"
-            log.info("Using Gemini OpenAI-compatible API with gemini-1.5-flash")
+            model = "gemini-2.0-flash"
 
         from openai import AsyncOpenAI
         client = AsyncOpenAI(api_key=api_key, base_url=base_url)
@@ -76,8 +75,12 @@ class BaseAgent(ABC):
         if response_format:
             kwargs["response_format"] = response_format
 
-        response = await client.chat.completions.create(**kwargs)
-        return response.choices[0].message.content
+        try:
+            response = await client.chat.completions.create(**kwargs)
+            return response.choices[0].message.content
+        except Exception as e:
+            log.warning("LLM call failed (%s). Falling back to deterministic mock response.", e)
+            return self._generate_mock_llm_response(system_prompt, user_prompt)
 
     def _generate_mock_llm_response(self, system_prompt: str, user_prompt: str) -> str:
         """Generates standard deterministic responses for offline dry-runs and testing."""

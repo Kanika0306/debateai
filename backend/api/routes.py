@@ -359,43 +359,49 @@ async def websocket_live(
     redis_client = get_redis()
     channel = f"debate:{session_id}:live"
 
+    disconnect_event = asyncio.Event()
+
+    async def read_from_client():
+        try:
+            while True:
+                await websocket.receive_text()
+        except WebSocketDisconnect as e:
+            log.info("WS /live: client disconnected via read in session %s, code=%s, reason=%s", session_id, e.code, getattr(e, "reason", None))
+        except Exception as e:
+            log.error("WS /live: client read error: %s", e)
+        finally:
+            disconnect_event.set()
+
+    reader_task = asyncio.create_task(read_from_client())
+
     try:
         if redis_client:
-            # Redis pub/sub path
             pubsub = redis_client.pubsub()
             pubsub.subscribe(channel)
             try:
-                while True:
-                    msg = pubsub.get_message(timeout=1.0)
+                while not disconnect_event.is_set():
+                    msg = pubsub.get_message(ignore_subscribe_messages=True)
                     if msg and msg["type"] == "message":
                         await websocket.send_text(msg["data"].decode("utf-8"))
-                    # Also check for messages from client (ping/close)
-                    try:
-                        data = await asyncio.wait_for(
-                            websocket.receive_text(), timeout=0.1
-                        )
-                    except asyncio.TimeoutError:
-                        pass
-                    except WebSocketDisconnect:
-                        break
+                    await asyncio.sleep(0.1)
             finally:
                 pubsub.unsubscribe(channel)
         else:
-            # In-memory queue fallback
             queue = get_live_queue(session_id)
-            while True:
+            while not disconnect_event.is_set():
                 try:
-                    payload = await asyncio.wait_for(queue.get(), timeout=30.0)
+                    payload = await asyncio.wait_for(queue.get(), timeout=1.0)
                     await websocket.send_text(payload)
                 except asyncio.TimeoutError:
-                    # Send keepalive ping
                     await websocket.send_json({"type": "ping"})
-                except WebSocketDisconnect:
-                    break
-
     except WebSocketDisconnect:
-        log.info("WS /live: client disconnected for session %s", session_id)
+        log.info("WS /live: client disconnected via write in session %s", session_id)
     except Exception as e:
         log.error("WS /live: error: %s", e)
     finally:
+        reader_task.cancel()
+        try:
+            await reader_task
+        except asyncio.CancelledError:
+            pass
         log.info("WS /live: cleanup for session %s", session_id)
