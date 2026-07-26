@@ -6,9 +6,33 @@ from agents.schemas import FactVerificationInput, FactVerificationOutput, ChunkM
 
 log = logging.getLogger(__name__)
 
+# Lazy singleton instance of LocalFactVerificationAgent
+_local_fact_verification_agent = None
+
+
+def get_local_fact_verification_agent():
+    global _local_fact_verification_agent
+    if _local_fact_verification_agent is None:
+        try:
+            from fact_verification.inference import LocalFactVerificationAgent
+            from fact_verification.config import CFG
+            import os
+            ckpt_dir = os.path.join(CFG.output_dir, "best")
+            if os.path.exists(ckpt_dir):
+                log.info("Initializing LocalFactVerificationAgent with fine-tuned DeBERTa model from %s", ckpt_dir)
+                _local_fact_verification_agent = LocalFactVerificationAgent(checkpoint_dir=ckpt_dir, threshold=0.70)
+            else:
+                log.warning("No fine-tuned model found at %s. Running FactVerificationAgent in pure LLM mode.", ckpt_dir)
+        except Exception as e:
+            log.warning("Failed to initialize LocalFactVerificationAgent (%s). Falling back to LLM.", e)
+            _local_fact_verification_agent = None
+    return _local_fact_verification_agent
+
+
 class FactVerificationAgent(BaseAgent):
     """
-    Verifies factual claims against retrieved evidence chunks using LLM reasoning.
+    Verifies factual claims against retrieved evidence chunks using a fine-tuned local DeBERTa-v3 model,
+    falling back to LLM reasoning when local confidence is under threshold (0.70).
     Produces structured verdict (True, False, Misleading, Unverified).
     """
 
@@ -22,6 +46,21 @@ class FactVerificationAgent(BaseAgent):
         )
 
     async def run(self, input: FactVerificationInput) -> FactVerificationOutput:
+        # Step 1: Try fine-tuned LocalFactVerificationAgent first
+        local_agent = get_local_fact_verification_agent()
+        if local_agent is not None:
+            try:
+                local_output = await local_agent.verify(input)
+                if local_output is not None and local_output.confidence >= 0.70:
+                    log.info(
+                        "LocalFactVerificationAgent high confidence match (verdict=%s, conf=%.2f)",
+                        local_output.verdict, local_output.confidence
+                    )
+                    return local_output
+            except Exception as e:
+                log.warning("LocalFactVerificationAgent execution error: %s. Falling back to LLM.", e)
+
+        # Step 2: Fallback to LLM verifier prompt reasoning
         if not input.evidence:
             return FactVerificationOutput(
                 claim=input.claim,

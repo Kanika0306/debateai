@@ -45,8 +45,9 @@ graph TD
 | **Dense Embeddings** | `BAAI/bge-large-en-v1.5` | 1024-dimensional BERT Dense Encoder | Encodes claims and RAG knowledge chunks for FAISS maximum inner product ($IP$) search. |
 | **Cross-Encoder Reranker** | `BAAI/bge-reranker-large` | Transformer Joint Query-Chunk Reranker | Scores top-$k$ FAISS candidate chunks against claim text to compute precise relevance rankings. |
 | **Fallacy Classifier (Local)** | `microsoft/deberta-v3-base` (Fine-Tuned) | 12-layer Sequence Classifier — 4,689 train / 1,006 val / 1,006 test | Sub-10ms local logical fallacy classification across 11 standardized classes with per-class confidence thresholds. |
+| **Fact Verification (Local)** | `microsoft/deberta-v3-large` (Fine-Tuned) | 24-layer NLI Pair Classifier — 197,316 train / 24,665 test | Fine-tuned 3-class NLI model (`SUPPORTS`, `REFUTES`, `NOT_ENOUGH_INFO`) trained on FEVER + LIAR with 0.70 confidence threshold fallback. |
 | **Claim Extraction Agent** | `GPT-4o-mini` / `Gemini 2.0 Flash` | Few-Shot Prompt Engineered LLM | Filters opinions and extracts checkable factual claims from transcript segments. |
-| **Fact Verification Agent** | `GPT-4o-mini` / `Gemini 2.0 Flash` | Multi-Evidence NLI Reasoning Engine | Synthesizes retrieved RAG evidence to assign verdicts (`True`, `False`, `Misleading`, `Unverified`). |
+| **Fact Verification Agent** | `LocalFactVerificationAgent` + LLM Ensemble | DeBERTa-v3 Local + `GPT-4o-mini` / `Gemini 2.0 Flash` Fallback | Confidence-gated fact verification combining local DeBERTa-v3-large with LLM multi-evidence reasoning. |
 | **Fallback Fallacy LLM** | `GPT-4o-mini` / `Gemini 2.0 Flash` | Prompted 11-Class Taxonomy Classifier | Ensemble fallback when `LocalFallacyAgent` confidence is below per-class threshold. |
 
 ---
