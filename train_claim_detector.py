@@ -1,21 +1,22 @@
 """
 train_claim_detector.py
 ==========================
-Claim Detector Fine-Tuning Script for DebateAI (v2 with Label Smoothing).
-Fine-tunes a transformer classifier (e.g. roberta-large / deberta-v3) on claim verification data.
+Sequence Classification Fine-Tuning Script for DebateAI.
+Fine-tunes transformer classifiers (Claim Detector, Fallacy Classifier, etc.).
 
-Supports class weighting, label smoothing (0.1), custom metrics logging (macro F1, per-class F1), FP16 / BF16, and early stopping.
+Supports Parquet, CSV, and JSONL data files, class weighting, label smoothing (0.1),
+custom metrics logging (macro F1, per-class F1), FP16 / BF16, and early stopping.
 
 USAGE:
   python train_claim_detector.py \
-    --data data/processed/claim_detection/checkthat_clean_3class.parquet \
-    --text-col claim \
-    --label-col mapped_verdict \
-    --output ./checkpoints/claim_detector_v2 \
-    --base-model roberta-large \
-    --epochs 6 \
-    --batch-size 8 \
-    --grad-accum 4 \
+    --data data/processed/fallacies/fallacy_examples_unified.jsonl \
+    --text-col text \
+    --label-col fallacy_type \
+    --output ./checkpoints/fallacy_classifier \
+    --base-model roberta-base \
+    --epochs 8 \
+    --batch-size 16 \
+    --grad-accum 2 \
     --fp16
 """
 
@@ -40,7 +41,7 @@ from transformers import (
 )
 
 
-class ClaimDataset(torch.utils.data.Dataset):
+class TextClassificationDataset(torch.utils.data.Dataset):
     def __init__(self, encodings, labels):
         self.encodings = encodings
         self.labels = labels
@@ -105,15 +106,15 @@ def compute_metrics(eval_pred, id2label):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Train DebateAI Claim Detector")
-    parser.add_argument("--data", required=True, help="Path to input parquet or csv file")
-    parser.add_argument("--text-col", default="claim", help="Column name containing claim text")
-    parser.add_argument("--label-col", default="mapped_verdict", help="Column name containing labels")
-    parser.add_argument("--output", default="./checkpoints/claim_detector", help="Output directory for model")
-    parser.add_argument("--base-model", "--model-name", dest="model_name", default="roberta-large", help="Pretrained model identifier")
-    parser.add_argument("--epochs", type=int, default=6, help="Number of training epochs")
-    parser.add_argument("--batch-size", type=int, default=8, help="Batch size per device")
-    parser.add_argument("--grad-accum", type=int, default=4, help="Gradient accumulation steps")
+    parser = argparse.ArgumentParser(description="Train DebateAI Sequence Classifier")
+    parser.add_argument("--data", required=True, help="Path to input parquet, csv, or jsonl file")
+    parser.add_argument("--text-col", default="text", help="Column name containing input text")
+    parser.add_argument("--label-col", default="label", help="Column name containing labels")
+    parser.add_argument("--output", default="./checkpoints/classifier", help="Output directory for model")
+    parser.add_argument("--base-model", "--model-name", dest="model_name", default="roberta-base", help="Pretrained model identifier")
+    parser.add_argument("--epochs", type=int, default=8, help="Number of training epochs")
+    parser.add_argument("--batch-size", type=int, default=16, help="Batch size per device")
+    parser.add_argument("--grad-accum", type=int, default=2, help="Gradient accumulation steps")
     parser.add_argument("--learning-rate", type=float, default=2e-5, help="Learning rate")
     parser.add_argument("--max-length", type=int, default=128, help="Maximum sequence length")
     parser.add_argument("--fp16", action="store_true", help="Enable FP16 mixed precision training")
@@ -124,7 +125,7 @@ def main():
     set_seed(args.seed)
 
     print("============================================================")
-    print("   DebateAI Claim Detector Training Pipeline (v2)")
+    print("   DebateAI Sequence Classifier Training Pipeline")
     print("============================================================")
     print(f"Data file: {args.data}")
     print(f"Model: {args.model_name}")
@@ -141,8 +142,10 @@ def main():
         df = pd.read_parquet(data_path)
     elif data_path.endswith(".csv"):
         df = pd.read_csv(data_path)
+    elif data_path.endswith(".jsonl") or data_path.endswith(".json"):
+        df = pd.read_json(data_path, lines=True if data_path.endswith(".jsonl") else False)
     else:
-        print("[ERROR] Unsupported data format. Use .parquet or .csv")
+        print("[ERROR] Unsupported data format. Use .parquet, .csv, or .jsonl")
         sys.exit(1)
 
     if args.text_col not in df.columns or args.label_col not in df.columns:
@@ -201,9 +204,9 @@ def main():
         test_df[args.text_col].tolist(), truncation=True, padding=True, max_length=args.max_length
     )
 
-    train_dataset = ClaimDataset(train_encodings, train_df["label_id"].tolist())
-    val_dataset = ClaimDataset(val_encodings, val_df["label_id"].tolist())
-    test_dataset = ClaimDataset(test_encodings, test_df["label_id"].tolist())
+    train_dataset = TextClassificationDataset(train_encodings, train_df["label_id"].tolist())
+    val_dataset = TextClassificationDataset(val_encodings, val_df["label_id"].tolist())
+    test_dataset = TextClassificationDataset(test_encodings, test_df["label_id"].tolist())
 
     out_dir = os.path.abspath(args.output)
     os.makedirs(out_dir, exist_ok=True)
