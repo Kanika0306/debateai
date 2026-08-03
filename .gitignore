@@ -28,8 +28,11 @@ vector_db/
 *.safetensors
 
 # Fine-Tuning Checkpoints & Data Splits
+checkpoints/
 fallacy_classifier/checkpoints/
 fallacy_classifier/data_splits/
+tmp_roberta/
+tmp_test/
 
 # Frontend Build & Node Modules
 frontend/.next/

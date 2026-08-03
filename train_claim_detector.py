@@ -271,6 +271,9 @@ def main():
     tokenizer.save_pretrained(best_model_path)
 
     metadata = {
+        "data_path": os.path.abspath(args.data),
+        "n_rows": len(df),
+        "args": vars(args),
         "label2id": label2id,
         "id2label": id2label,
         "test_metrics": test_results.metrics,
